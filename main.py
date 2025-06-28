@@ -8,7 +8,7 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 class BedrockModelActivator:
-    def __init__(self, region_name: str = 'us-east-1'):
+    def __init__(self, region_name: str = 'us-west-2'):
         """
         Initialize Bedrock Model Activator
 
@@ -34,6 +34,33 @@ class BedrockModelActivator:
         except ClientError as e:
             logger.error(f"Error listing foundation models: {e}")
             raise
+
+    def filter_on_demand_models(self, models: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+        """
+        Filter models to only include those supporting ON_DEMAND or INFERENCE_PROFILE
+
+        Args:
+            models: List of model summaries from list_foundation_models
+
+        Returns:
+            List of filtered models supporting ON_DEMAND or INFERENCE_PROFILE
+        """
+        filtered_models = []
+
+        for model in models:
+            model_id = model.get('modelId')
+            inference_types = model.get('inferenceTypesSupported', [])
+
+            # Check if model supports ON_DEMAND or INFERENCE_PROFILE
+            if any(inference_type in ['ON_DEMAND', 'INFERENCE_PROFILE']
+                   for inference_type in inference_types):
+                filtered_models.append(model)
+                logger.info(f"Model {model_id} supports: {inference_types}")
+            else:
+                logger.info(f"Skipping model {model_id} - unsupported inference types: {inference_types}")
+
+        logger.info(f"Filtered to {len(filtered_models)} ON_DEMAND/INFERENCE_PROFILE models")
+        return filtered_models
 
     def check_model_access_status(self, models: List[Dict[str, Any]]) -> tuple[
         List[Dict], List[Dict]
@@ -138,12 +165,16 @@ class BedrockModelActivator:
         # Step 1: List all foundation models
         all_models = self.list_foundation_models()
 
-        # Step 2: Check which models need access
-        accessible_models, models_needing_access = self.check_model_access_status(all_models)
+        # Step 2: Filter to ON_DEMAND and INFERENCE_PROFILE models only
+        filtered_models = self.filter_on_demand_models(all_models)
 
-        # Step 3 & 4: For models needing access, get offers and create agreements
+        # Step 3: Check which models need access
+        accessible_models, models_needing_access = self.check_model_access_status(filtered_models)
+
+        # Step 4 & 5: For models needing access, get offers and create agreements
         activation_results = {
             'total_models': len(all_models),
+            'filtered_models': len(filtered_models),
             'already_accessible': len(accessible_models),
             'attempted_activation': len(models_needing_access),
             'successful_activations': 0,
@@ -220,6 +251,7 @@ class BedrockModelActivator:
         print("="*50)
         print(f"Region: {self.region_name}")
         print(f"Total models found: {results['total_models']}")
+        print(f"Filtered models (ON_DEMAND/INFERENCE_PROFILE): {results['filtered_models']}")
         print(f"Already accessible: {results['already_accessible']}")
         print(f"Attempted activation: {results['attempted_activation']}")
         print(f"Successful activations: {results['successful_activations']}")
