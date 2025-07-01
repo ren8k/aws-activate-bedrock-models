@@ -8,7 +8,7 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 class BedrockModelActivator:
-    def __init__(self, region_name: str = 'us-west-2'):
+    def __init__(self, region_name: str = 'us-east-1'):
         """
         Initialize Bedrock Model Activator
 
